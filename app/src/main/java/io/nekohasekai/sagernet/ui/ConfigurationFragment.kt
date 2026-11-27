@@ -27,6 +27,7 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.view.size
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceDataStore
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -43,6 +44,8 @@ import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.aidl.TrafficData
 import io.nekohasekai.sagernet.bg.BaseService
+import io.nekohasekai.sagernet.bg.checkUserId
+import io.nekohasekai.sagernet.bg.refreshRealityServerAddress
 import io.nekohasekai.sagernet.bg.proto.UrlTest
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
@@ -66,6 +69,7 @@ import io.nekohasekai.sagernet.ktx.dp2px
 import io.nekohasekai.sagernet.ktx.getColorAttr
 import io.nekohasekai.sagernet.ktx.getColour
 import io.nekohasekai.sagernet.ktx.isIpAddress
+import io.nekohasekai.sagernet.ktx.onIoDispatcher
 import io.nekohasekai.sagernet.ktx.onMainDispatcher
 import io.nekohasekai.sagernet.ktx.readableMessage
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
@@ -92,6 +96,7 @@ import io.nekohasekai.sagernet.ui.profile.VMessSettingsActivity
 import io.nekohasekai.sagernet.ui.profile.WireGuardSettingsActivity
 import io.nekohasekai.sagernet.widget.QRCodeDialog
 import io.nekohasekai.sagernet.widget.UndoSnackbarManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -110,6 +115,7 @@ import okhttp3.internal.closeQuietly
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.UnknownHostException
+import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -343,8 +349,69 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     }
 
+    private fun refreshSelectedProfileIp(item: MenuItem) {
+        val profileId = DataStore.selectedProxy
+        item.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val profile = onIoDispatcher { SagerDatabase.proxyDao.getById(profileId) }
+                if (profile == null) {
+                    snackbar(R.string.profile_empty).show()
+                    return@launch
+                }
+                val userId = profile.checkUserId()
+                if (userId == null) {
+                    snackbar(R.string.refresh_server_ip_unsupported).show()
+                    return@launch
+                }
+
+                val originalAddress = profile.requireBean().serverAddress
+                if (!refreshRealityServerAddress(profile, SagerNet.underlyingNetwork)) {
+                    snackbar(R.string.refresh_server_ip_unchanged).show()
+                    return@launch
+                }
+
+                val newAddress = profile.requireBean().serverAddress
+                val updated = onIoDispatcher {
+                    SagerDatabase.instance.runInTransaction(Callable {
+                        val current = SagerDatabase.proxyDao.getById(profileId)
+                        if (current == null || current.checkUserId() != userId ||
+                            current.requireBean().serverAddress != originalAddress
+                        ) {
+                            return@Callable null
+                        }
+                        current.requireBean().serverAddress = newAddress
+                        SagerDatabase.proxyDao.updateProxy(current)
+                        current
+                    })
+                }
+                if (updated == null) {
+                    snackbar(R.string.refresh_server_ip_profile_changed).show()
+                    return@launch
+                }
+
+                if (DataStore.selectedProxy == profileId && DataStore.currentProfile == profileId &&
+                    DataStore.serviceState == BaseService.State.Connected
+                ) {
+                    SagerNet.reloadService()
+                }
+                ProfileManager.postUpdate(updated)
+                snackbar(getString(R.string.refresh_server_ip_updated, newAddress)).show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logs.w(e)
+                snackbar(e.readableMessage).show()
+            } finally {
+                item.isEnabled = true
+            }
+        }
+    }
+
     override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.action_refresh_server_ip -> refreshSelectedProfileIp(item)
+
             R.id.action_scan_qr_code -> {
                 startActivity(Intent(context, ScannerActivity::class.java))
             }

@@ -1,5 +1,6 @@
 package io.nekohasekai.sagernet.bg
 
+import android.net.Network
 import android.system.Os
 import android.system.OsConstants
 import io.nekohasekai.sagernet.database.ProxyEntity
@@ -8,6 +9,7 @@ import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ktx.readableMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Dns
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -33,11 +35,11 @@ internal fun ProxyEntity.checkUserId(): String? {
     return userIdSuffix.find(bean.name.orEmpty().trim())?.groupValues?.get(1)
 }
 
-internal suspend fun refreshRealityServerAddress(profile: ProxyEntity) {
+internal suspend fun refreshRealityServerAddress(profile: ProxyEntity, network: Network? = null): Boolean {
     val userId = profile.checkUserId()
     if (userId == null) {
         Logs.i("check-user: skipped; selected profile must be VLESS Reality with a -P<number> or -T<number> name suffix")
-        return
+        return false
     }
     val bean = profile.requireBean() as VMessBean
     val requestBody = JSONObject().put("userid", userId).toString()
@@ -46,10 +48,17 @@ internal suspend fun refreshRealityServerAddress(profile: ProxyEntity) {
         .post(requestBody.toRequestBody("application/json; charset=utf-8".toMediaType()))
         .build()
 
-    Logs.i("check-user: sending POST before starting VPN")
+    val client = network?.let {
+        checkUserClient.newBuilder()
+            .socketFactory(it.socketFactory)
+            .dns(Dns { hostname -> it.getAllByName(hostname).toList() })
+            .build()
+    } ?: checkUserClient
+
+    Logs.i("check-user: sending POST")
     val address = try {
         withContext(Dispatchers.IO) {
-            checkUserClient.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
 
                 val body = response.peekBody(129).bytes()
@@ -69,7 +78,8 @@ internal suspend fun refreshRealityServerAddress(profile: ProxyEntity) {
         throw IOException("check-user: ${e.readableMessage}", e)
     }
     if (address != null) bean.serverAddress = address
-    Logs.i("check-user: valid IP received; proceeding with connection")
+    Logs.i("check-user: valid IP received")
+    return address != null
 }
 
 private fun parseIp(address: String) =

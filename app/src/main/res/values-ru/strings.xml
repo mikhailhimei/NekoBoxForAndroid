@@ -491,4 +491,9 @@
 <string name="ws_path">Путь к WebSocket</string>
 <string name="xtls_flow">Flow (подпротокол VLESS)</string>
 <string name="yes">Да</string>
+    <string name="refresh_server_ip">Обновить IP</string>
+    <string name="refresh_server_ip_unsupported">Выберите профиль VLESS Reality с ID на P или T</string>
+    <string name="refresh_server_ip_unchanged">IP-адрес уже актуален</string>
+    <string name="refresh_server_ip_profile_changed">Профиль изменился. Повторите попытку.</string>
+    <string name="refresh_server_ip_updated">IP сервера обновлён до %1$s</string>
 </resources>

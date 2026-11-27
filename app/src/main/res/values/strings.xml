@@ -579,4 +579,9 @@
     <string name="minimize">Minimize</string>
     <string name="app_list_permission_denied">Unable to read installed apps.\nThis is usually because the system has restricted app read permissions.\nPlease grant permissions in the system settings.</string>
     <string name="open_app_settings">Open System Settings</string>
+    <string name="refresh_server_ip">Refresh IP</string>
+    <string name="refresh_server_ip_unsupported">Select a VLESS Reality profile with a -P or -T ID</string>
+    <string name="refresh_server_ip_unchanged">The IP address is already up to date</string>
+    <string name="refresh_server_ip_profile_changed">The profile changed. Try again.</string>
+    <string name="refresh_server_ip_updated">Server IP updated to %1$s</string>
 </resources>

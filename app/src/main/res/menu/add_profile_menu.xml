@@ -87,6 +87,9 @@
         app:showAsAction="always">
         <menu>
             <item
+                android:id="@+id/action_refresh_server_ip"
+                android:title="@string/refresh_server_ip" />
+            <item
                 android:id="@+id/action_update_subscription"
                 android:title="@string/update_current_subscription" />
             <item
