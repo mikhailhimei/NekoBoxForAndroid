@@ -463,7 +463,7 @@ fun buildConfig(
         if (buildSelector) {
             val list = group.id.let { SagerDatabase.proxyDao.getByGroup(it) }
             list.forEach {
-                tagMap[it.id] = buildChain(it.id, it)
+                tagMap[it.id] = buildChain(it.id, if (it.id == proxy.id) proxy else it)
             }
             outbounds.add(0, Outbound_SelectorOptions().apply {
                 type = "selector"

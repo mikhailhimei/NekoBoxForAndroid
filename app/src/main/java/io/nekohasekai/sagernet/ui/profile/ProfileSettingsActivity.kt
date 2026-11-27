@@ -22,6 +22,7 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceDataStore
@@ -30,6 +31,9 @@ import com.github.shadowsocks.plugin.Empty
 import com.github.shadowsocks.plugin.fragment.AlertDialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.nekohasekai.sagernet.*
+import io.nekohasekai.sagernet.bg.BaseService
+import io.nekohasekai.sagernet.bg.checkUserId
+import io.nekohasekai.sagernet.bg.refreshRealityProfile
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProfileManager
@@ -40,6 +44,8 @@ import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.ktx.*
 import io.nekohasekai.sagernet.ui.ThemedActivity
 import io.nekohasekai.sagernet.widget.ListListener
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
 import kotlin.properties.Delegates
 
@@ -150,7 +156,7 @@ abstract class ProfileSettingsActivity<T : AbstractBean>(
 
     }
 
-    val child by lazy { supportFragmentManager.findFragmentById(R.id.settings) as MyPreferenceFragmentCompat }
+    val child get() = supportFragmentManager.findFragmentById(R.id.settings) as MyPreferenceFragmentCompat
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.profile_config_menu, menu)
@@ -166,13 +172,60 @@ abstract class ProfileSettingsActivity<T : AbstractBean>(
                 isVisible = true // not new profile
             }
         }
+        menu.findItem(R.id.action_refresh_server_ip)?.isVisible = proxyEntity?.checkUserId() != null
         // shared menu item
         menu.findItem(R.id.action_custom_outbound_json)?.isVisible = true
         menu.findItem(R.id.action_custom_config_json)?.isVisible = true
         return true
     }
 
-    override fun onOptionsItemSelected(item: MenuItem) = child.onOptionsItemSelected(item)
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId != R.id.action_refresh_server_ip) return child.onOptionsItemSelected(item)
+        val profileId = proxyEntity?.id ?: return true
+        if (DataStore.dirty) {
+            Toast.makeText(this, R.string.unsaved_changes_prompt, Toast.LENGTH_SHORT).show()
+            return true
+        }
+        item.isEnabled = false
+        lifecycleScope.launch {
+            try {
+                val profile = onIoDispatcher { SagerDatabase.proxyDao.getById(profileId) }
+                if (profile?.checkUserId() == null) {
+                    Toast.makeText(this@ProfileSettingsActivity, R.string.refresh_server_ip_profile_changed, Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val changed = refreshRealityProfile(profile, SagerNet.underlyingNetwork)
+                proxyEntity?.putBean(profile.requireBean())
+                if (!DataStore.dirty) {
+                    (profile.requireBean() as T).init()
+                    supportFragmentManager.beginTransaction()
+                        .replace(R.id.settings, MyPreferenceFragmentCompat())
+                        .commit()
+                }
+                if (changed) {
+                    ProfileManager.postUpdate(profile)
+                    if (DataStore.selectedProxy == profileId && DataStore.currentProfile == profileId &&
+                        DataStore.serviceState == BaseService.State.Connected
+                    ) {
+                        SagerNet.reloadService()
+                    }
+                }
+                Toast.makeText(
+                    this@ProfileSettingsActivity,
+                    if (changed) R.string.refresh_server_ip_updated else R.string.refresh_server_ip_unchanged,
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logs.w(e)
+                Toast.makeText(this@ProfileSettingsActivity, e.readableMessage, Toast.LENGTH_LONG).show()
+            } finally {
+                item.isEnabled = true
+            }
+        }
+        return true
+    }
 
     override fun onBackPressed() {
         if (DataStore.dirty) UnsavedChangesDialogFragment().apply { key() }

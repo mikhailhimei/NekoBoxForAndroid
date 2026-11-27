@@ -2,6 +2,7 @@ package io.nekohasekai.sagernet.ui
 
 import android.Manifest.permission.POST_NOTIFICATIONS
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -14,6 +15,8 @@ import androidx.activity.addCallback
 import androidx.annotation.IdRes
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withResumed
 import androidx.preference.PreferenceDataStore
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.navigation.NavigationView
@@ -48,6 +51,7 @@ import io.nekohasekai.sagernet.ktx.onMainDispatcher
 import io.nekohasekai.sagernet.ktx.parseProxies
 import io.nekohasekai.sagernet.ktx.readableMessage
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
+import kotlinx.coroutines.launch
 import moe.matsuri.nb4a.utils.Util
 
 class MainActivity : ThemedActivity(),
@@ -123,6 +127,26 @@ class MainActivity : ThemedActivity(),
                 .setMessage(R.string.preview_version_hint)
                 .setPositiveButton(android.R.string.ok, null)
                 .show()
+        }
+
+        checkForAppUpdate()
+    }
+
+    private fun checkForAppUpdate() {
+        val preferences = getPreferences(Context.MODE_PRIVATE)
+        lifecycleScope.launch {
+            val lastOffered = preferences.getString("last_offered_update_tag", null)
+            val update = findAppUpdate(BuildConfig.CHECK_USER_VERSION, lastOffered, Build.SUPPORTED_ABIS)
+                ?: return@launch
+            lifecycle.withResumed {
+                MaterialAlertDialogBuilder(this@MainActivity)
+                    .setTitle(R.string.app_update_available)
+                    .setMessage(getString(R.string.app_update_version_message, update.tag))
+                    .setPositiveButton(R.string.download) { _, _ -> launchCustomTab(update.downloadUrl) }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+                preferences.edit().putString("last_offered_update_tag", update.tag).apply()
+            }
         }
     }
 

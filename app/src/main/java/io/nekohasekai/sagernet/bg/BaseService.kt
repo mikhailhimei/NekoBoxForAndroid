@@ -201,8 +201,10 @@ class BaseService {
         }
 
         fun canReloadSelector(): Boolean {
+            if (data.state != State.Connected) return false
             if ((data.proxy?.config?.selectorGroupId ?: -1L) < 0) return false
             val ent = SagerDatabase.proxyDao.getById(DataStore.selectedProxy) ?: return false
+            if (ent.checkUserId() != null) return false
             val tmpBox = ProxyInstance(ent)
             tmpBox.buildConfigTmp()
             if (tmpBox.lastSelectorGroupId == data.proxy?.lastSelectorGroupId) {
@@ -357,9 +359,18 @@ class BaseService {
 
             data.changeState(State.Connecting)
             runOnMainDispatcher {
+                data.connectingJob = coroutineContext.job
                 try {
                     data.notification = createNotification(ServiceNotification.genTitle(profile))
 
+                    try {
+                        refreshRealityProfile(profile)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logs.w("check-user: starting with the saved profile (${e.readableMessage})")
+                    }
+                    ensureActive()
                     Executable.killAll()    // clean up old processes
                     preInit()
                     proxy.init()
