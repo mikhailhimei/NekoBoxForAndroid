@@ -45,8 +45,7 @@ import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.aidl.TrafficData
 import io.nekohasekai.sagernet.bg.BaseService
 import io.nekohasekai.sagernet.bg.checkUserId
-import io.nekohasekai.sagernet.bg.refreshRealityServerAddress
-import io.nekohasekai.sagernet.bg.saveRefreshedServerAddress
+import io.nekohasekai.sagernet.bg.refreshRealityProfile
 import io.nekohasekai.sagernet.bg.proto.UrlTest
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
@@ -349,7 +348,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     }
 
-    private fun refreshSelectedProfileIp(item: MenuItem) {
+    private fun refreshSelectedProfileKey(item: MenuItem) {
         val profileId = DataStore.selectedProxy
         item.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
@@ -364,16 +363,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                     return@launch
                 }
 
-                val originalAddress = profile.requireBean().serverAddress
-                if (!refreshRealityServerAddress(profile, SagerNet.underlyingNetwork)) {
+                if (!refreshRealityProfile(profile, SagerNet.underlyingNetwork)) {
                     snackbar(R.string.refresh_server_ip_unchanged).show()
-                    return@launch
-                }
-
-                val newAddress = profile.requireBean().serverAddress
-                val updated = saveRefreshedServerAddress(profile, originalAddress)
-                if (updated == null) {
-                    snackbar(R.string.refresh_server_ip_profile_changed).show()
                     return@launch
                 }
 
@@ -382,8 +373,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                 ) {
                     SagerNet.reloadService()
                 }
-                ProfileManager.postUpdate(updated)
-                snackbar(getString(R.string.refresh_server_ip_updated, newAddress)).show()
+                ProfileManager.postUpdate(profile)
+                snackbar(R.string.refresh_server_ip_updated).show()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -397,7 +388,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.action_refresh_server_ip -> refreshSelectedProfileIp(item)
+            R.id.action_refresh_server_ip -> refreshSelectedProfileKey(item)
 
             R.id.action_scan_qr_code -> {
                 startActivity(Intent(context, ScannerActivity::class.java))

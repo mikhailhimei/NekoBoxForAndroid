@@ -363,10 +363,7 @@ class BaseService {
                 try {
                     data.notification = createNotification(ServiceNotification.genTitle(profile))
 
-                    val originalAddress = profile.requireBean().serverAddress
-                    if (refreshRealityServerAddress(profile)) {
-                        saveRefreshedServerAddress(profile, originalAddress)
-                    }
+                    refreshRealityProfile(profile)
                     Executable.killAll()    // clean up old processes
                     preInit()
                     proxy.init()

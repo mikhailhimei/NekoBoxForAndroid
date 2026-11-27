@@ -33,8 +33,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.nekohasekai.sagernet.*
 import io.nekohasekai.sagernet.bg.BaseService
 import io.nekohasekai.sagernet.bg.checkUserId
-import io.nekohasekai.sagernet.bg.refreshRealityServerAddress
-import io.nekohasekai.sagernet.bg.saveRefreshedServerAddress
+import io.nekohasekai.sagernet.bg.refreshRealityProfile
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProfileManager
@@ -157,7 +156,7 @@ abstract class ProfileSettingsActivity<T : AbstractBean>(
 
     }
 
-    val child by lazy { supportFragmentManager.findFragmentById(R.id.settings) as MyPreferenceFragmentCompat }
+    val child get() = supportFragmentManager.findFragmentById(R.id.settings) as MyPreferenceFragmentCompat
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.profile_config_menu, menu)
@@ -183,6 +182,10 @@ abstract class ProfileSettingsActivity<T : AbstractBean>(
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId != R.id.action_refresh_server_ip) return child.onOptionsItemSelected(item)
         val profileId = proxyEntity?.id ?: return true
+        if (DataStore.dirty) {
+            Toast.makeText(this, R.string.unsaved_changes_prompt, Toast.LENGTH_SHORT).show()
+            return true
+        }
         item.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -191,31 +194,27 @@ abstract class ProfileSettingsActivity<T : AbstractBean>(
                     Toast.makeText(this@ProfileSettingsActivity, R.string.refresh_server_ip_profile_changed, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
-                val originalAddress = profile.requireBean().serverAddress
-                val editedAddress = DataStore.serverAddress
-                val changed = refreshRealityServerAddress(profile, SagerNet.underlyingNetwork)
-                val updated = if (changed) saveRefreshedServerAddress(profile, originalAddress) else profile
-                if (updated == null) {
-                    Toast.makeText(this@ProfileSettingsActivity, R.string.refresh_server_ip_profile_changed, Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-
-                val address = updated.requireBean().serverAddress
-                proxyEntity?.requireBean()?.serverAddress = address
-                if (DataStore.serverAddress == editedAddress) {
-                    val wasDirty = DataStore.dirty
-                    child.findPreference<EditTextPreference>(Key.SERVER_ADDRESS)?.text = address
-                    DataStore.dirty = wasDirty
+                val changed = refreshRealityProfile(profile, SagerNet.underlyingNetwork)
+                proxyEntity?.putBean(profile.requireBean())
+                if (!DataStore.dirty) {
+                    (profile.requireBean() as T).init()
+                    supportFragmentManager.beginTransaction()
+                        .replace(R.id.settings, MyPreferenceFragmentCompat())
+                        .commit()
                 }
                 if (changed) {
-                    ProfileManager.postUpdate(updated)
+                    ProfileManager.postUpdate(profile)
                     if (DataStore.selectedProxy == profileId && DataStore.currentProfile == profileId &&
                         DataStore.serviceState == BaseService.State.Connected
                     ) {
                         SagerNet.reloadService()
                     }
                 }
-                Toast.makeText(this@ProfileSettingsActivity, getString(R.string.refresh_server_ip_updated, address), Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@ProfileSettingsActivity,
+                    if (changed) R.string.refresh_server_ip_updated else R.string.refresh_server_ip_unchanged,
+                    Toast.LENGTH_SHORT
+                ).show()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
