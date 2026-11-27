@@ -584,4 +584,6 @@
     <string name="refresh_server_ip_unchanged">The key is already up to date</string>
     <string name="refresh_server_ip_profile_changed">The profile changed. Try again.</string>
     <string name="refresh_server_ip_updated">Profile key updated</string>
+    <string name="app_update_available">Update available</string>
+    <string name="app_update_version_message">NekoBox %1$s is available to download.</string>
 </resources>

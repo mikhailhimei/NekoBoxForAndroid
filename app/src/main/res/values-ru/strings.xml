@@ -496,4 +496,6 @@
     <string name="refresh_server_ip_unchanged">Ключ уже актуален</string>
     <string name="refresh_server_ip_profile_changed">Профиль изменился. Повторите попытку.</string>
     <string name="refresh_server_ip_updated">Ключ профиля обновлён</string>
+    <string name="app_update_available">Доступно обновление</string>
+    <string name="app_update_version_message">NekoBox %1$s доступен для скачивания.</string>
 </resources>
