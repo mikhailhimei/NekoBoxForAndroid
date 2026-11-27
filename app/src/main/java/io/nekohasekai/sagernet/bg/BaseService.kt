@@ -363,7 +363,14 @@ class BaseService {
                 try {
                     data.notification = createNotification(ServiceNotification.genTitle(profile))
 
-                    refreshRealityProfile(profile)
+                    try {
+                        refreshRealityProfile(profile)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logs.w("check-user: starting with the saved profile (${e.readableMessage})")
+                    }
+                    ensureActive()
                     Executable.killAll()    // clean up old processes
                     preInit()
                     proxy.init()
