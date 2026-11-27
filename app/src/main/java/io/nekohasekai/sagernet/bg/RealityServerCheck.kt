@@ -6,6 +6,7 @@ import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.fmt.v2ray.VMessBean
 import io.nekohasekai.sagernet.fmt.v2ray.parseDuckSoft
 import io.nekohasekai.sagernet.ktx.Logs
+import io.nekohasekai.sagernet.ktx.parseNumericAddress
 import io.nekohasekai.sagernet.ktx.readableMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -66,11 +67,18 @@ internal suspend fun refreshRealityProfile(profile: ProxyEntity, network: Networ
                 val body = response.peekBody(8193).bytes()
                 if (body.size > 8192) throw IOException("response is too large")
 
-                val link = try {
-                    JSONObject(body.toString(Charsets.UTF_8)).opt("vless") as? String
+                val payload = try {
+                    JSONObject(body.toString(Charsets.UTF_8))
                 } catch (e: JSONException) {
                     throw IOException("invalid JSON response", e)
-                }?.trim()
+                }
+                val serverIp = (payload.opt("ip") as? String)?.trim()?.parseNumericAddress()
+                    ?: throw IOException("invalid or missing ip field")
+                if (serverIp == bean.serverAddress.parseNumericAddress()) {
+                    return@withContext null
+                }
+
+                val link = (payload.opt("vless") as? String)?.trim()
                 if (link == null || !link.startsWith("vless://")) {
                     throw IOException("invalid or missing vless field")
                 }
@@ -106,7 +114,7 @@ internal suspend fun refreshRealityProfile(profile: ProxyEntity, network: Networ
         }
     } catch (e: IOException) {
         throw IOException("check-user: ${e.readableMessage}", e)
-    }
+    } ?: return false
     if (refreshed == bean) return false
     withContext(Dispatchers.IO) {
         SagerDatabase.instance.runInTransaction(Callable {
