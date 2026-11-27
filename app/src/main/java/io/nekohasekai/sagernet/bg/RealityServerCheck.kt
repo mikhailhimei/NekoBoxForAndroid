@@ -4,12 +4,15 @@ import android.system.Os
 import android.system.OsConstants
 import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.fmt.v2ray.VMessBean
+import io.nekohasekai.sagernet.ktx.Logs
+import io.nekohasekai.sagernet.ktx.readableMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.io.IOException
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
@@ -30,28 +33,37 @@ internal fun ProxyEntity.checkUserId(): String? {
 }
 
 internal suspend fun refreshRealityServerAddress(profile: ProxyEntity) {
-    val userId = profile.checkUserId() ?: return
+    val userId = profile.checkUserId()
+    if (userId == null) {
+        Logs.i("check-user: skipped; selected profile must be VLESS Reality with a -P<number> name suffix")
+        return
+    }
     val bean = profile.requireBean() as VMessBean
+    val requestBody = JSONObject().put("userid", userId).toString()
     val request = Request.Builder()
         .url(CHECK_USER_URL)
-        .post(userId.toRequestBody("text/plain; charset=utf-8".toMediaType()))
+        .post(requestBody.toRequestBody("application/json; charset=utf-8".toMediaType()))
         .build()
 
-    val address = withContext(Dispatchers.IO) {
-        checkUserClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("check-user: HTTP ${response.code}")
+    Logs.i("check-user: sending POST before starting VPN")
+    val address = try {
+        withContext(Dispatchers.IO) {
+            checkUserClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+
+                val body = response.peekBody(129).bytes()
+                val ip = body.toString(Charsets.UTF_8).trim()
+                val parsedIp = parseIp(ip)
+                if (body.size > 128 || parsedIp == null) throw IOException("invalid IP address")
+
+                ip.takeUnless { parsedIp == parseIp(bean.serverAddress) }
             }
-            val body = response.peekBody(129).bytes()
-            val ip = body.toString(Charsets.UTF_8).trim()
-            val parsedIp = parseIp(ip)
-            if (body.size > 128 || parsedIp == null) {
-                throw IOException("check-user: invalid IP address")
-            }
-            ip.takeUnless { parsedIp == parseIp(bean.serverAddress) }
         }
+    } catch (e: IOException) {
+        throw IOException("check-user: ${e.readableMessage}", e)
     }
     if (address != null) bean.serverAddress = address
+    Logs.i("check-user: valid IP received; proceeding with connection")
 }
 
 private fun parseIp(address: String) =

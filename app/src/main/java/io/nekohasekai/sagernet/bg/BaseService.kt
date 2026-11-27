@@ -363,9 +363,9 @@ class BaseService {
                 try {
                     data.notification = createNotification(ServiceNotification.genTitle(profile))
 
+                    refreshRealityServerAddress(profile)
                     Executable.killAll()    // clean up old processes
                     preInit()
-                    refreshRealityServerAddress(profile)
                     proxy.init()
                     DataStore.currentProfile = profile.id
 
