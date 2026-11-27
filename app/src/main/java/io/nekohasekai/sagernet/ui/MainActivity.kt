@@ -136,15 +136,16 @@ class MainActivity : ThemedActivity(),
         val preferences = getPreferences(Context.MODE_PRIVATE)
         lifecycleScope.launch {
             val lastOffered = preferences.getString("last_offered_update_tag", null)
-            val tag = findAppUpdate(BuildConfig.VERSION_NAME, lastOffered) ?: return@launch
+            val update = findAppUpdate(BuildConfig.CHECK_USER_VERSION, lastOffered, Build.SUPPORTED_ABIS)
+                ?: return@launch
             lifecycle.withResumed {
                 MaterialAlertDialogBuilder(this@MainActivity)
                     .setTitle(R.string.app_update_available)
-                    .setMessage(getString(R.string.app_update_version_message, tag))
-                    .setPositiveButton(R.string.download) { _, _ -> launchCustomTab(APP_UPDATE_APK_URL) }
+                    .setMessage(getString(R.string.app_update_version_message, update.tag))
+                    .setPositiveButton(R.string.download) { _, _ -> launchCustomTab(update.downloadUrl) }
                     .setNegativeButton(android.R.string.cancel, null)
                     .show()
-                preferences.edit().putString("last_offered_update_tag", tag).apply()
+                preferences.edit().putString("last_offered_update_tag", update.tag).apply()
             }
         }
     }

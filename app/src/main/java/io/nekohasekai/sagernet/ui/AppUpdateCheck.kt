@@ -10,7 +10,7 @@ import org.json.JSONException
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-internal const val APP_UPDATE_APK_URL = "http://lamaamaama.hopto.org:8000/NekoBox.apk"
+private const val RELEASE_DOWNLOAD_BASE = "https://github.com/mikhailhimei/NekoBoxForAndroid/releases/download"
 private const val RELEASES_URL =
     "https://api.github.com/repos/mikhailhimei/NekoBoxForAndroid/releases?per_page=20"
 private const val MAX_RELEASES_BYTES = 512L * 1024
@@ -36,7 +36,13 @@ private fun parseRelease(tag: String): AppRelease? {
     return AppRelease(tag, parts[0], parts[1], parts[2], parts[3])
 }
 
-internal suspend fun findAppUpdate(installedVersion: String, lastOffered: String?): String? {
+internal data class AppUpdate(val tag: String, val downloadUrl: String)
+
+internal suspend fun findAppUpdate(
+    installedVersion: String,
+    lastOffered: String?,
+    supportedAbis: Array<String>,
+): AppUpdate? {
     val installed = parseRelease(installedVersion) ?: return null
     val lastOfferedRelease = lastOffered?.let(::parseRelease)
     return withContext(Dispatchers.IO) {
@@ -52,13 +58,18 @@ internal suspend fun findAppUpdate(installedVersion: String, lastOffered: String
 
                 val releases = JSONArray(bytes.toString(Charsets.UTF_8))
                 var latest = maxOf(installed, lastOfferedRelease ?: installed)
+                var update: AppUpdate? = null
                 for (index in 0 until releases.length()) {
                     val release = releases.optJSONObject(index) ?: continue
                     if (release.optBoolean("draft")) continue
                     val candidate = parseRelease(release.optString("tag_name")) ?: continue
-                    if (candidate > latest) latest = candidate
+                    if (candidate <= latest) continue
+                    val assets = release.optJSONArray("assets") ?: continue
+                    val downloadUrl = findApkDownload(assets, candidate.tag, supportedAbis) ?: continue
+                    latest = candidate
+                    update = AppUpdate(candidate.tag, downloadUrl)
                 }
-                latest.tag.takeIf { latest > installed && (lastOfferedRelease == null || latest > lastOfferedRelease) }
+                update
             }
         } catch (e: IOException) {
             Logs.i("App update check failed", e)
@@ -68,4 +79,17 @@ internal suspend fun findAppUpdate(installedVersion: String, lastOffered: String
             null
         }
     }
+}
+
+private fun findApkDownload(assets: JSONArray, tag: String, supportedAbis: Array<String>): String? {
+    for (abi in supportedAbis) {
+        for (index in 0 until assets.length()) {
+            val asset = assets.optJSONObject(index) ?: continue
+            val name = asset.optString("name")
+            if (!name.endsWith("-$abi-debug.apk")) continue
+            val url = asset.optString("browser_download_url")
+            if (url == "$RELEASE_DOWNLOAD_BASE/$tag/$name") return url
+        }
+    }
+    return null
 }

@@ -144,11 +144,13 @@ fun Project.setupApp() {
     val pkgName = requireMetadata().getProperty("PACKAGE_NAME")
     val verName = requireMetadata().getProperty("VERSION_NAME")
     val verCode = (requireMetadata().getProperty("VERSION_CODE").toInt()) * 5
+    val checkUserRevision = requireMetadata().getProperty("CHECK_USER_REVISION").toInt()
     android.apply {
         defaultConfig {
             applicationId = pkgName
             versionCode = verCode
             versionName = verName
+            buildConfigField("String", "CHECK_USER_VERSION", "\"$verName-check-user.$checkUserRevision\"")
             buildConfigField("String", "PRE_VERSION_NAME", "\"\"")
         }
     }
