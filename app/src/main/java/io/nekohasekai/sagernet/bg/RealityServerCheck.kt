@@ -19,7 +19,7 @@ import java.net.Proxy
 import java.util.concurrent.TimeUnit
 
 private const val CHECK_USER_URL = "http://lamaamaama.hopto.org:8000/check-user"
-private val userIdSuffix = Regex("""(?:^|-)(P[0-9]+)$""")
+private val userIdSuffix = Regex("""(?:^|-)([PT][0-9]+)$""")
 private val checkUserClient = OkHttpClient.Builder()
     .proxy(Proxy.NO_PROXY)
     .followRedirects(false)
@@ -36,7 +36,7 @@ internal fun ProxyEntity.checkUserId(): String? {
 internal suspend fun refreshRealityServerAddress(profile: ProxyEntity) {
     val userId = profile.checkUserId()
     if (userId == null) {
-        Logs.i("check-user: skipped; selected profile must be VLESS Reality with a -P<number> name suffix")
+        Logs.i("check-user: skipped; selected profile must be VLESS Reality with a -P<number> or -T<number> name suffix")
         return
     }
     val bean = profile.requireBean() as VMessBean
