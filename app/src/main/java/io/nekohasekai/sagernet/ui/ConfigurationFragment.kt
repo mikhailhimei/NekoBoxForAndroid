@@ -46,6 +46,7 @@ import io.nekohasekai.sagernet.aidl.TrafficData
 import io.nekohasekai.sagernet.bg.BaseService
 import io.nekohasekai.sagernet.bg.checkUserId
 import io.nekohasekai.sagernet.bg.refreshRealityServerAddress
+import io.nekohasekai.sagernet.bg.saveRefreshedServerAddress
 import io.nekohasekai.sagernet.bg.proto.UrlTest
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
@@ -115,7 +116,6 @@ import okhttp3.internal.closeQuietly
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.UnknownHostException
-import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -359,8 +359,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                     snackbar(R.string.profile_empty).show()
                     return@launch
                 }
-                val userId = profile.checkUserId()
-                if (userId == null) {
+                if (profile.checkUserId() == null) {
                     snackbar(R.string.refresh_server_ip_unsupported).show()
                     return@launch
                 }
@@ -372,19 +371,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }
 
                 val newAddress = profile.requireBean().serverAddress
-                val updated = onIoDispatcher {
-                    SagerDatabase.instance.runInTransaction(Callable {
-                        val current = SagerDatabase.proxyDao.getById(profileId)
-                        if (current == null || current.checkUserId() != userId ||
-                            current.requireBean().serverAddress != originalAddress
-                        ) {
-                            return@Callable null
-                        }
-                        current.requireBean().serverAddress = newAddress
-                        SagerDatabase.proxyDao.updateProxy(current)
-                        current
-                    })
-                }
+                val updated = saveRefreshedServerAddress(profile, originalAddress)
                 if (updated == null) {
                     snackbar(R.string.refresh_server_ip_profile_changed).show()
                     return@launch

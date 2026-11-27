@@ -4,6 +4,7 @@ import android.net.Network
 import android.system.Os
 import android.system.OsConstants
 import io.nekohasekai.sagernet.database.ProxyEntity
+import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.fmt.v2ray.VMessBean
 import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ktx.readableMessage
@@ -18,6 +19,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.net.Proxy
+import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
 
 private const val CHECK_USER_URL = "http://lamaamaama.hopto.org:8000/check-user"
@@ -80,6 +82,23 @@ internal suspend fun refreshRealityServerAddress(profile: ProxyEntity, network: 
     if (address != null) bean.serverAddress = address
     Logs.i("check-user: valid IP received")
     return address != null
+}
+
+internal suspend fun saveRefreshedServerAddress(
+    profile: ProxyEntity,
+    originalAddress: String,
+): ProxyEntity? = withContext(Dispatchers.IO) {
+    SagerDatabase.instance.runInTransaction(Callable {
+        val current = SagerDatabase.proxyDao.getById(profile.id)
+        if (current == null || current.checkUserId() != profile.checkUserId() ||
+            current.requireBean().serverAddress != originalAddress
+        ) {
+            return@Callable null
+        }
+        current.requireBean().serverAddress = profile.requireBean().serverAddress
+        SagerDatabase.proxyDao.updateProxy(current)
+        current
+    })
 }
 
 private fun parseIp(address: String) =
