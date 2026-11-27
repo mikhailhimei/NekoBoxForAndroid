@@ -18,7 +18,7 @@ import java.io.IOException
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
 
-private const val CHECK_USER_URL = "http://lamaamaama.hopto.org/check-user"
+private const val CHECK_USER_URL = "http://lamaamaama.hopto.org:8000/check-user"
 private val userIdSuffix = Regex("""(?:^|-)(P[0-9]+)$""")
 private val checkUserClient = OkHttpClient.Builder()
     .proxy(Proxy.NO_PROXY)
