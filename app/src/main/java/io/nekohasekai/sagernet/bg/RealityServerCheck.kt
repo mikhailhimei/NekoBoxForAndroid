@@ -47,7 +47,7 @@ internal suspend fun refreshRealityProfile(profile: ProxyEntity, network: Networ
     val bean = profile.requireBean() as VMessBean
     val requestBody = JSONObject()
         .put("userid", userId)
-        .put("login", bean.uuid)
+        .put("uuid", bean.uuid)
         .toString()
     val request = Request.Builder()
         .url(CHECK_USER_URL)
