@@ -12,6 +12,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.net.Proxy
@@ -52,9 +53,14 @@ internal suspend fun refreshRealityServerAddress(profile: ProxyEntity) {
                 if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
 
                 val body = response.peekBody(129).bytes()
-                val ip = body.toString(Charsets.UTF_8).trim()
-                val parsedIp = parseIp(ip)
-                if (body.size > 128 || parsedIp == null) throw IOException("invalid IP address")
+                if (body.size > 128) throw IOException("response is too large")
+
+                val ip = try {
+                    (JSONObject(body.toString(Charsets.UTF_8)).opt("ip") as? String)?.trim()
+                } catch (e: JSONException) {
+                    throw IOException("invalid JSON response", e)
+                }
+                val parsedIp = ip?.let(::parseIp) ?: throw IOException("invalid or missing ip field")
 
                 ip.takeUnless { parsedIp == parseIp(bean.serverAddress) }
             }
